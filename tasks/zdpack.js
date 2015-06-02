@@ -6,37 +6,83 @@
  * Licensed under the MIT license.
  */
 
-'use strict';
-
 module.exports = function(grunt) {
 
-    // Please see the Grunt documentation for more information regarding task
-    // creation: http://gruntjs.com/creating-tasks
+    var cp = require('child_process')
+        , f = require('util').format
+        , _ = grunt.util._
+        , log = grunt.log
+        , verbose = grunt.verbose;
 
-    grunt.registerMultiTask('zdpack', 'Archives a directory into a Zend framework .zpk file.', function() {
+    grunt.registerMultiTask('zdpack', 'Archives a project distribution into a Zend framework .zpk file.', function() {
 
-        var options = this.options({
-            project: ''
+        var data = this.data
+            , execOptions = data.options !== undefined ? data.options : {}
+            , stdout = data.stdout !== undefined ? data.stdout : true
+            , stderr = data.stderr !== undefined ? data.stderr : true
+            , callback = _.isFunction(data.callback) ? data.callback : function () {
+            }
+            , exitCodes = data.exitCode || data.exitCodes || 0
+            , command
+            , childProcess
+            , done = this.async();
+
+        // https://github.com/jharding/grunt-exec/pull/30
+        exitCodes = _.isArray(exitCodes) ? exitCodes : [exitCodes];
+
+        if (!grunt.file.exists(data.src)) {
+            log.error('Distribution does not exist. Run `grunt build` first');
+            return done(false);
+        }
+
+        // Create the destination directory if it doesn't exist. Zend
+        // will fall over if the --output-dir isn't there
+        //
+        if (!grunt.file.exists(data.dest)) {
+            grunt.file.mkdir(data.dest);
+        }
+
+        // Set the command and adjust if windows platform
+        //
+        command = "/usr/local/zend/bin/zdpack";
+
+        if (process.platform === 'win32') {
+            command = "C:\\Program Files (x86)\\Zend\\ZendServer\\bin\\zdpack";
+        }
+
+        // Add the command options
+        //
+        command  = command + ' --output-dir=' + data.dest + ' pack ' + data.src;
+
+        verbose.subhead(command);
+        verbose.writeln(f('Expecting exit code %s', exitCodes.join(' or ')));
+
+        childProcess = cp.exec(command, execOptions, callback);
+
+        stdout && childProcess.stdout.on('data', function (d) {
+            log.write(d);
+        });
+        stderr && childProcess.stderr.on('data', function (d) {
+            log.error(d);
         });
 
-        var src = unixifyPath(options.src);
-        var dest = unixifyPath(options.dest);
+        // Catches failing to execute the command at all (eg spawn ENOENT),
+        // since in that case an 'exit' event will not be emitted.
+        childProcess.on('error', function (err) {
+            log.error(f('Failed with: %s', err));
+            done(false);
+        });
 
-        if (!grunt.file.exists(dest)) {
-            grunt.file.mkdir(dest);
-        }
+        childProcess.on('exit', function (code) {
+            if (exitCodes.indexOf(code) < 0) {
+                log.error(f('Exited with code: %d.', code));
+                return done(false);
+            }
 
-        // Print a success message.
-        grunt.log.writeln( options.project + '.zpk file successfully created.');
+            verbose.ok(f('Exited with code: %d.', code));
+            done();
+        });
 
     });
-
-    var unixifyPath = function(filepath) {
-        if (process.platform === 'win32') {
-            return filepath.replace(/\\/g, '/');
-        } else {
-            return filepath;
-        }
-    };
 
 };
