@@ -47,6 +47,7 @@ module.exports = function(grunt) {
         command = "/usr/local/zend/bin/zdpack";
 
         if (process.platform === 'win32') {
+            verbose.writeln(f('This platform is ' + process.platform + ', changing command install location.'));
             command = "C:\\Program Files (x86)\\Zend\\ZendServer\\bin\\zdpack";
         }
 
